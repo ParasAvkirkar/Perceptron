@@ -25,7 +25,7 @@ def read_file(file_path):
     return np.array(X), np.array(y)
 
 
-class Perceptron:
+class AdaBoost:
     def __init__(self):
         pass
 
