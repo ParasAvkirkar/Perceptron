@@ -170,7 +170,7 @@ class Perceptron:
             test_y = np.array(test_y).reshape(test_len, 1)
 
             perceptron = Perceptron()
-            weight_vector = perceptron.learn(X, y)
+            weight_vector = self.learn(X, y)
             output_set.append({"w": weight_vector, "test_X": test_X, "test_y": test_y})
 
         return output_set

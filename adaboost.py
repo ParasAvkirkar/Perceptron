@@ -29,6 +29,9 @@ class AdaBoost:
     def __init__(self):
         pass
 
+    def weak_learner(self):
+        pass
+
     def learn(self, X, y):
         m = X.shape[0]  # size of training sequence
         d = X.shape[1]  # dimension of training instance
@@ -169,7 +172,7 @@ class AdaBoost:
             test_X = np.array(test_X).reshape(test_len, feature_len)
             test_y = np.array(test_y).reshape(test_len, 1)
 
-            perceptron = Perceptron()
+            perceptron = AdaBoost()
             weight_vector = perceptron.learn(X, y)
             output_set.append({"w": weight_vector, "test_X": test_X, "test_y": test_y})
 
@@ -199,12 +202,12 @@ if __name__ == '__main__':
 
     X, y = read_file(args.dataset)
     print("Read Training sequence and label set: {0} {1}".format(str(X.shape), str(y.shape)))
-    learner = Perceptron()
+    learner = AdaBoost()
     if args.mode == "erm":
         w = learner.learn(X, y)
         error = learner.calculate_risk(X, y, w)
         print(learner.format_erm_output(w, error))
     else:
         output_set = learner.learn_in_kfolds(X, y, 10)
-        mean_error, individual_erros = learner.calculate_kfold_errors(output_set)
-        print(learner.format_cross_val_output(individual_erros, mean_error))
+        mean_error, individual_errors = learner.calculate_kfold_errors(output_set)
+        print(learner.format_cross_val_output(individual_errors, mean_error))
