@@ -1,6 +1,7 @@
 import argparse
 import os
 import numpy as np
+import math
 import random
 
 
@@ -29,62 +30,79 @@ class AdaBoost:
     def __init__(self):
         pass
 
-    def weak_learner(self):
-        pass
+    def weak_learner(self, X, y, distribution_vector):
+        m = X.shape[0]
+        d = X.shape[1]
 
-    def learn(self, X, y):
+        F_star = float('inf')
+        j_star = -1
+        theta_star = -1
+        for j in range(d):
+            features = X[:, j]
+            feature_y_d_list = [{"x": features[i], "y": y[i, 0], "d": distribution_vector[i,0]} for i in range(m)]
+
+            feature_y_d_list = sorted(feature_y_d_list, key=lambda criteria: criteria["x"])
+            F = sum([feature_y_d_list[i]["d"] if feature_y_d_list[i]["y"] == 1.0 else 0.0 for i in range(m)])
+            if F < F_star:
+                F_star = F
+                theta_star = feature_y_d_list[0]["x"] - 1
+                j_star = j
+
+            # add dummy suffix to reduce if-else case in taking average when encountered last element
+            feature_y_d_list = feature_y_d_list + [{"x": feature_y_d_list[m-1]["x"] + 1, "y": -1.0, "d": -1.0}]
+            for i in range(m):
+                F = F - feature_y_d_list[i]["y"] * feature_y_d_list[i]["d"]
+                if F < F_star:
+                    F_star = F
+                    theta_star = (feature_y_d_list[i]["x"] + feature_y_d_list[i+1]["x"]) * 0.5
+                    j_star = j
+
+        return j_star, theta_star
+
+
+    def learn(self, X, y, T):
         m = X.shape[0]  # size of training sequence
         d = X.shape[1]  # dimension of training instance
-
-        # To account for bias term, increasing dimension of weight vector by 1,
-        # and adding extra feature with value 1 in vector X of domain set
-        w = np.zeros((1, d + 1), dtype=float)
-        X = np.append(X, np.ones((m, 1), dtype=float), axis=1)
 
         # Treating class 0 as -1 and class 1 as +1
         y = np.where(y == 0, -1.0, y)
 
-        X = np.transpose(X)
-        y = np.transpose(y)
-
-        t = 1
-        should_terminate = False
-        while not should_terminate:
-            h_x = np.dot(w, X)
-            y_dot_w_x = np.multiply(y, h_x)
-
-            should_terminate = True
+        distribution_vector = np.array([1.0/m for i in range(m)]).reshape(m, 1)
+        hypothesis_params_by_iterations = []
+        for t in range(T):
+            j_star, theta_star = self.weak_learner(X, y, distribution_vector)
+            epsilon = 0.0
+            predictions = []
             for i in range(m):
-                if y_dot_w_x[0][i] <= 0:
-                    should_terminate = False
-                    w = np.add(w, np.multiply(y[0][i], X[:, i]))
-                    break
+                prediction = 1.0 if theta_star - X[i, j_star] < 0 else -1.0
+                predictions.append(prediction)
+                epsilon += distribution_vector[i, 0] * (1.0 if prediction != y[i, 0] else 0.0)
 
-            if t % 100000 == 0:
-                print("Run completed: {0}, {1}".format(str(t), str(w)))
-            t += 1
+            w_t = 0.5 * math.log(1.0/epsilon - 1)
 
-        print("Iterations took: {0}".format(str(t)))
+            prediction_vector = np.array(predictions).reshape(m, 1)
 
-        return w
+            temp_distribution_vector = np.multiply(-1.0 * w_t, np.multiply(y, prediction_vector))
+            temp_distribution_vector = np.exp(temp_distribution_vector)
+            temp_distribution_vector = np.multiply(distribution_vector, temp_distribution_vector)
+            distribution_vector = np.multiply(1.0/np.sum(temp_distribution_vector), temp_distribution_vector)
 
-    def calculate_risk(self, X, y, w):
+            hypothesis_params_by_iterations.append({"w_t": w_t, "j_star": j_star, "theta_star": theta_star})
+
+        return hypothesis_params_by_iterations
+
+    def get_mismatched_indexes(self, X, y, j_star, theta_star):
         m = X.shape[0]
 
-        # To account for bias term, adding extra feature with value 1 in vector X of domain set
-        X = np.append(X, np.ones((m, 1), dtype=float), axis=1)
         # Treating class 0 as -1 and class 1 as +1
         y = np.where(y == 0, -1, y)
 
-        X = np.transpose(X)
-        y = np.transpose(y)
+        diffs = X[:, j_star] - theta_star
+        predictions = np.where(diffs < 0, -1, 1)
 
-        h_x = np.dot(w, X)
-        h_x = np.where(h_x > 0, 1, -1)
-        mistakes = np.where(h_x != y)
-        empirical_risk = float(mistakes[0].shape[0]) / m
+        mismatches = predictions != y
 
-        return empirical_risk
+        return np.argwhere(mismatches)
 
     def format_erm_output(self, weight_vector, error):
         separation = "-".join("" for i in range(40))
@@ -204,9 +222,9 @@ if __name__ == '__main__':
     print("Read Training sequence and label set: {0} {1}".format(str(X.shape), str(y.shape)))
     learner = AdaBoost()
     if args.mode == "erm":
-        w = learner.learn(X, y)
-        error = learner.calculate_risk(X, y, w)
-        print(learner.format_erm_output(w, error))
+        w = learner.learn(X, y, 5)
+        # error = learner.calculate_risk(X, y, w)
+        # print(learner.format_erm_output(w, error))
     else:
         output_set = learner.learn_in_kfolds(X, y, 10)
         mean_error, individual_errors = learner.calculate_kfold_errors(output_set)
