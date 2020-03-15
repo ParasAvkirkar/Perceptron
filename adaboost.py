@@ -108,7 +108,7 @@ class AdaBoost:
                 j_star = params['j_star']
 
                 feature_value = X[i, j_star]
-                weighted_sum += abs(w_t) * (self.predict_by_stump(feature=feature_value, decision_stump=theta_star))
+                weighted_sum += w_t * (self.predict_by_stump(feature=feature_value, decision_stump=theta_star))
 
             prediction = 1.0 if weighted_sum > 0 else -1.0
             error += 1.0 if prediction != y[i,0] else 0.0
@@ -116,7 +116,7 @@ class AdaBoost:
         return error/m
 
     def format_erm_output(self, hypothesis_params, error):
-        return "Final Output Error: {0}".format(str(error))
+        return "Final Output Error: {0}, Accuracy: {1}".format(str(error), str(1-error))
 
     def collect_fold(self, folds, accumulator):
         if len(accumulator) > 0:
@@ -147,7 +147,7 @@ class AdaBoost:
                 self.collect_fold(folds, accumulator)
                 accumulator = []
 
-        # Adding residual if any left
+        # Adding residual instances left inside the last batch from the accumulator
         self.collect_fold(folds, accumulator)
 
         return folds
@@ -158,11 +158,11 @@ class AdaBoost:
         mean_error = 0.0
 
         for output in output_set:
-            weight_vector = output["w"]
+            hypothesis_params = output["hypothesis_params"]
             test_X = output["test_X"]
             test_y = output["test_y"]
 
-            error = self.calculate_risk(test_X, test_y, weight_vector)
+            error = self.calculate_risk(test_X, test_y, hypothesis_params)
             individual_errors.append(error)
             mean_error += error
 
@@ -170,21 +170,21 @@ class AdaBoost:
 
         return mean_error, individual_errors
 
-    def learn_in_kfolds(self, X, y, number_of_folds):
-        feature_len = X.shape[1]
+    def learn_in_kfolds(self, X, y, number_of_folds, adaboost_iterations):
+        d = X.shape[1]
         folds = self.generate_folds(X, y, number_of_folds)
 
         output_set = []
 
-        for test_fold_no in range(len(folds)):
-            print("Processing: {0}".format(str(test_fold_no)))
+        for fold_number in range(len(folds)):
+            print("Processing: {0}".format(str(fold_number)))
 
             X = []
             y = []
             test_X = []
             test_y = []
             for i in range(len(folds)):
-                if i == test_fold_no:
+                if i == fold_number:
                     test_X = folds[i]['X']
                     test_y = folds[i]['y']
                 else:
@@ -193,19 +193,20 @@ class AdaBoost:
 
             train_len = len(X)
             test_len = len(test_X)
-            X = np.array(X).reshape(train_len, feature_len)
+            X = np.array(X).reshape(train_len, d)
             y = np.array(y).reshape(train_len, 1)
-            test_X = np.array(test_X).reshape(test_len, feature_len)
+            test_X = np.array(test_X).reshape(test_len, d)
             test_y = np.array(test_y).reshape(test_len, 1)
 
-            perceptron = AdaBoost()
-            weight_vector = perceptron.learn(X, y)
-            output_set.append({"w": weight_vector, "test_X": test_X, "test_y": test_y})
+            adaboostLearner = AdaBoost()
+            hypothesis_params = adaboostLearner.learn(X, y, adaboost_iterations)
+            output_set.append({"hypothesis_params": hypothesis_params, "test_X": test_X, "test_y": test_y})
 
         return output_set
 
     def format_cross_val_output(self, individual_errors, mean_error):
-        return "Final output: Mean Error: {0},\nIndividual Errors: {1}".format(
+        return "Final accuracy: {0}, Mean Error: {1},\nIndividual Errors: {2}".format(
+            str(1.0 - mean_error),
             str(mean_error),
             str(individual_errors)
         )
@@ -230,10 +231,10 @@ if __name__ == '__main__':
     print("Read Training sequence and label set: {0} {1}".format(str(X.shape), str(y.shape)))
     learner = AdaBoost()
     if args.mode == "erm":
-        hypothesis_params = learner.learn(X, y, 5)
+        hypothesis_params = learner.learn(X, y, 1000)
         error = learner.calculate_risk(X, y, hypothesis_params)
         print(learner.format_erm_output(hypothesis_params, error))
     else:
-        output_set = learner.learn_in_kfolds(X, y, 10)
+        output_set = learner.learn_in_kfolds(X, y, 10, 10)
         mean_error, individual_errors = learner.calculate_kfold_errors(output_set)
         print(learner.format_cross_val_output(individual_errors, mean_error))
