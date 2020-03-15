@@ -57,8 +57,8 @@ class Perceptron:
                     w = np.add(w, np.multiply(y[0][i], X[:, i]))
                     break
 
-            if t % 100000 == 0:
-                print("Run completed: {0}, {1}".format(str(t), str(w)))
+            if t == 100000:
+                should_terminate = True
             t += 1
 
         print("Iterations took: {0}".format(str(t)))

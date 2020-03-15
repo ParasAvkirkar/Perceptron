@@ -30,6 +30,9 @@ class AdaBoost:
     def __init__(self):
         pass
 
+    def predict_by_stump(self, feature, decision_stump):
+        return 1.0 if feature < decision_stump else -1.0
+
     def weak_learner(self, X, y, distribution_vector):
         m = X.shape[0]
         d = X.shape[1]
@@ -52,7 +55,7 @@ class AdaBoost:
             feature_y_d_list = feature_y_d_list + [{"x": feature_y_d_list[m-1]["x"] + 1, "y": -1.0, "d": -1.0}]
             for i in range(m):
                 F = F - feature_y_d_list[i]["y"] * feature_y_d_list[i]["d"]
-                if F < F_star:
+                if F < F_star and feature_y_d_list[i]['x'] != feature_y_d_list[i+1]['x']:
                     F_star = F
                     theta_star = (feature_y_d_list[i]["x"] + feature_y_d_list[i+1]["x"]) * 0.5
                     j_star = j
@@ -70,15 +73,16 @@ class AdaBoost:
         distribution_vector = np.array([1.0/m for i in range(m)]).reshape(m, 1)
         hypothesis_params_by_iterations = []
         for t in range(T):
+            print("Processing round: {0}".format(str(t + 1)))
             j_star, theta_star = self.weak_learner(X, y, distribution_vector)
             epsilon = 0.0
             predictions = []
             for i in range(m):
-                prediction = 1.0 if theta_star - X[i, j_star] < 0 else -1.0
+                prediction = self.predict_by_stump(feature=X[i,j_star], decision_stump=theta_star)
                 predictions.append(prediction)
                 epsilon += distribution_vector[i, 0] * (1.0 if prediction != y[i, 0] else 0.0)
 
-            w_t = 0.5 * math.log(1.0/epsilon - 1)
+            w_t = 0.5 * math.log((1.0/epsilon) - 1)
 
             prediction_vector = np.array(predictions).reshape(m, 1)
 
@@ -87,28 +91,32 @@ class AdaBoost:
             temp_distribution_vector = np.multiply(distribution_vector, temp_distribution_vector)
             distribution_vector = np.multiply(1.0/np.sum(temp_distribution_vector), temp_distribution_vector)
 
+            print("Round stat: {0}, weight: {1}, j_star: {2}, theta_star: {3}".format(str(t), str(w_t), str(j_star), str(theta_star)))
             hypothesis_params_by_iterations.append({"w_t": w_t, "j_star": j_star, "theta_star": theta_star})
 
         return hypothesis_params_by_iterations
 
-    def get_mismatched_indexes(self, X, y, j_star, theta_star):
+    def calculate_risk(self, X, y, hypothesis_params):
         m = X.shape[0]
+        error = 0.0
+        y = np.where(y == 0, -1.0, 1.0)
+        for i in range(m):
+            weighted_sum = 0.0
+            for params in hypothesis_params:
+                w_t = params['w_t']
+                theta_star = params['theta_star']
+                j_star = params['j_star']
 
-        # Treating class 0 as -1 and class 1 as +1
-        y = np.where(y == 0, -1, y)
+                feature_value = X[i, j_star]
+                weighted_sum += abs(w_t) * (self.predict_by_stump(feature=feature_value, decision_stump=theta_star))
 
-        diffs = X[:, j_star] - theta_star
-        predictions = np.where(diffs < 0, -1, 1)
+            prediction = 1.0 if weighted_sum > 0 else -1.0
+            error += 1.0 if prediction != y[i,0] else 0.0
 
-        mismatches = predictions != y
+        return error/m
 
-        return np.argwhere(mismatches)
-
-    def format_erm_output(self, weight_vector, error):
-        separation = "-".join("" for i in range(40))
-        return "{0}\nFinal output\nError: {1}\nWeight Vector: {2}\n{3}".format(separation, str(error),
-                                                                               str(weight_vector),
-                                                                               separation)
+    def format_erm_output(self, hypothesis_params, error):
+        return "Final Output Error: {0}".format(str(error))
 
     def collect_fold(self, folds, accumulator):
         if len(accumulator) > 0:
@@ -222,9 +230,9 @@ if __name__ == '__main__':
     print("Read Training sequence and label set: {0} {1}".format(str(X.shape), str(y.shape)))
     learner = AdaBoost()
     if args.mode == "erm":
-        w = learner.learn(X, y, 5)
-        # error = learner.calculate_risk(X, y, w)
-        # print(learner.format_erm_output(w, error))
+        hypothesis_params = learner.learn(X, y, 5)
+        error = learner.calculate_risk(X, y, hypothesis_params)
+        print(learner.format_erm_output(hypothesis_params, error))
     else:
         output_set = learner.learn_in_kfolds(X, y, 10)
         mean_error, individual_errors = learner.calculate_kfold_errors(output_set)
