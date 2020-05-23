@@ -1,3 +1,4 @@
+import time
 import argparse
 import os
 import numpy as np
@@ -171,6 +172,7 @@ class Perceptron:
 
             perceptron = Perceptron()
             weight_vector = self.learn(X, y)
+            print("Weights of fold: {0}, {1}".format(str(test_fold_no), str(weight_vector)))
             output_set.append({"w": weight_vector, "test_X": test_X, "test_y": test_y})
 
         return output_set
